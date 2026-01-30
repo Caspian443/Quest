@@ -28,14 +28,21 @@ def visualize_layer_attention(attention_tensor, layer_idx, tokens, output_dir=".
     # 设置 Grid 大小：4行8列 = 32个Head
     rows = 4
     cols = 8
-    fig, axes = plt.subplots(rows, cols, figsize=(24, 12))
-    fig.suptitle(f"Layer {layer_idx} Attention Maps (All 32 Heads)", fontsize=20)
+    # 增加图片高度以容纳标签
+    fig, axes = plt.subplots(rows, cols, figsize=(32, 20))
+    fig.suptitle(f"Layer {layer_idx} Attention Maps (All 32 Heads)", fontsize=24)
     
     # 获取 Token 标签（为了显示清晰，稍微处理一下）
     # Llama3 的 token 可能包含特殊字符，替换掉以便显示
     display_tokens = [t.replace('Ġ', '').replace('Ċ', '\\n') for t in tokens]
 
     print(f"Plotting Layer {layer_idx}...")
+
+    # 简单的 Causal Mask 检查 (检查上三角是否全为0)
+    # 注意：有时候会有极小值浮点误差，这里用一个很小的阈值判断
+    upper_tri = torch.triu(attention_tensor[0], diagonal=1)
+    is_causal = torch.all(upper_tri.abs() < 1e-6)
+    print(f"Layer {layer_idx} Causal Mask Check (Head 0): {'Satisfied (Upper triangle is ~0)' if is_causal else 'Warning: Non-zero values in upper triangle'}")
     
     for i in range(num_heads):
         row = i // cols
@@ -46,23 +53,23 @@ def visualize_layer_attention(attention_tensor, layer_idx, tokens, output_dir=".
         attn_map = attention_tensor[i].float().cpu().numpy()
         
         # 绘制热力图
-        # vmin=0, vmax=1 实际上大多数 attention 非常稀疏，用 log scale 可能更好，
-        # 但为了直观看到“强关注”，这里不做 log 处理，让强点更突出。
         sns.heatmap(
             attn_map,
-            xticklabels=False, # 小图就不显示横轴标签了，太挤
-            yticklabels=False, # 小图就不显示纵轴标签了
+            xticklabels=display_tokens, # 显示横轴标签
+            yticklabels=display_tokens, # 显示纵轴标签
             cmap="viridis",    # 使用高对比度色阶
-            cbar=False,        # 不显示 Colorbar 节省空间
+            cbar=True,         # 显示 Colorbar 以便区分数值高低
             square=True,
-            ax=ax
+            ax=ax,
+            vmin=0, vmax=1     # 固定色阶范围 0-1，方便跨头比较
         )
-        ax.set_title(f"H{i}", fontsize=10)
+        ax.set_title(f"H{i}", fontsize=12)
         
-        # 只在左下角的图显示标签，或者干脆都不显示，太密了看不清
-        # 如果只想看几个特定的，可以单独画。这里为了看分布，先略去标签。
+        # 设置标签字体大小和旋转
+        ax.set_xticklabels(display_tokens, rotation=90, fontsize=6)
+        ax.set_yticklabels(display_tokens, rotation=0, fontsize=6)
 
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     output_path = os.path.join(output_dir, f"Llama3_Layer_{layer_idx}_Heads.png")
     plt.savefig(output_path, dpi=150)
     print(f"Saved: {output_path}")
@@ -112,9 +119,12 @@ def main():
         # batch size 默认为 1
         layer_attn = all_attentions[layer_idx][0] 
         
-        visualize_layer_attention(layer_attn, layer_idx, tokens)
+        # 确保输出目录存在
+        output_dir = "aux_exp/plot"
+        os.makedirs(output_dir, exist_ok=True)
+        visualize_layer_attention(layer_attn, layer_idx, tokens, output_dir=output_dir)
 
-    print("Done! Check the generated PNG files.")
+    print(f"Done! Check the generated PNG files in {output_dir}.")
 
 if __name__ == "__main__":
     main()
