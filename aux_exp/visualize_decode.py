@@ -135,8 +135,9 @@ def main():
     prompt_tokens = tokenizer.convert_ids_to_tokens(inputs.input_ids[0])
     
     # 第一次前向传播，获取 KV Cache
+    # 注意：必须要加上 output_attentions=True，否则 outputs.attentions 是 None
     with torch.no_grad():
-        outputs = model(**inputs, use_cache=True)
+        outputs = model(**inputs, use_cache=True, output_attentions=True)
     
     past_key_values = outputs.past_key_values
     input_ids = inputs.input_ids
